@@ -240,10 +240,12 @@ vector<Cell *> give_friend_positions(World *world, Hero* hero, bool near) {
     return ret;
 }
 
-void calc_f(World* world, Hero* hero, bool istank = 0){
+void calc_f(World* world, Hero* hero){
     Map map = world->getMap();
     int n = map.getRowNum();
     int m = map.getColumnNum();
+
+    bool istank = (hero->getName() == HeroName::GUARDIAN);
 
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < m; j++) {
@@ -269,7 +271,7 @@ void calc_f(World* world, Hero* hero, bool istank = 0){
                 if(!inside_map(map.getRowNum(), map.getColumnNum(), r, c))
                     continue;
 
-                f[r][c] -= (3 - dis_with_friend) * 10000000;
+                f[r][c] -= (3 - dis_with_friend) * 20000000;
             }
         }
     }
@@ -301,53 +303,49 @@ void calc_f(World* world, Hero* hero, bool istank = 0){
     }
 
     // near enemy
-    if (!istank) {
-        for (Hero *hero_enemy : world->getOppHeroes()) {
+    int const INF = 1111;
+    int fl[N][N];
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < m; j++)
+            fl[i][j] = INF;
 
-            int enemy_row = hero_enemy->getCurrentCell().getRow();
-            int enemy_column = hero_enemy->getCurrentCell().getColumn();
 
-            for (int dr = -5; dr <= 5; dr++) {
-                for (int dc = -5; dc <= 5; dc++) {
+    for (Hero *hero_enemy : world->getOppHeroes()) {
 
-                    int dis_with_enemy = abs(dr) + abs(dc);
-                    if (dis_with_enemy > 5)
-                        continue;
+        int enemy_row = hero_enemy->getCurrentCell().getRow();
+        int enemy_column = hero_enemy->getCurrentCell().getColumn();
 
-                    int r = enemy_row + dr;
-                    int c = enemy_column + dc;
-                    if (!inside_map(map.getRowNum(), map.getColumnNum(), r, c))
-                        continue;
+        for (int dr = -5; dr <= 5; dr++) {
+            for (int dc = -5; dc <= 5; dc++) {
 
-                    f[r][c] += 100000;
-                    f[r][c] += (5 - abs(4 - dis_with_enemy)) * 10000;
-                }
-            }
-        }
-    }else {
-        for (Hero *hero_enemy : world->getOppHeroes()) {
+                int dis_with_enemy = abs(dr) + abs(dc);
+                if (dis_with_enemy > 5)
+                    continue;
 
-            int enemy_row = hero_enemy->getCurrentCell().getRow();
-            int enemy_column = hero_enemy->getCurrentCell().getColumn();
+                int r = enemy_row + dr;
+                int c = enemy_column + dc;
+                if (!inside_map(map.getRowNum(), map.getColumnNum(), r, c))
+                    continue;
 
-            for (int dr = -2; dr <= 2; dr++) {
-                for (int dc = -2; dc <= 2; dc++) {
-
-                    int dis_with_enemy = abs(dr) + abs(dc);
-                    if (dis_with_enemy > 2)
-                        continue;
-
-                    int r = enemy_row + dr;
-                    int c = enemy_column + dc;
-                    if (!inside_map(map.getRowNum(), map.getColumnNum(), r, c))
-                        continue;
-
-                    f[r][c] += 10000;
-                    f[r][c] += (2 - dis_with_enemy) * 1000;
-                }
+                fl[r][c] = min(fl[r][c], dis_with_enemy);
+                // f[r][c] += 100000;
+                // f[r][c] += (5 - abs(4 - dis_with_enemy)) * 10000;
             }
         }
     }
+
+    int range = (istank ? 1 : 4);
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            if (fl[i][j] <= range) {
+                f[i][j] += 100000;
+                f[i][j] += fl[i][j] * 10000;
+            }
+        }
+    }
+
+
 
     // near to hero
     /*
@@ -488,9 +486,25 @@ void AI::move(World *world) {
 
     int needing = calcAP(world);
 
+    // ordering
+    vector<Hero*> order;
+
+    for (Hero* hero : world->getMyHeroes())
+        if (hero->getName() == HeroName::GUARDIAN)
+            order.push_back(hero);
+
+    for (Hero* hero : world->getMyHeroes())
+        if (hero->getName() != HeroName::GUARDIAN)
+            order.push_back(hero);
+
+
+
+
+
     // calc destination
-    if (world->getMovePhaseNum() % 3 == 0) {
-        for (Hero *hero : world->getMyHeroes()) {
+    if (world->getMovePhaseNum() % 1 == 0) {
+
+        for (Hero *hero : order) {
             Cell cell = hero->getCurrentCell();
             pii cur_cell = {cell.getRow(), cell.getColumn()};
             int id = hero->getId();
@@ -498,11 +512,7 @@ void AI::move(World *world) {
             if (cur_cell.first == -1)
                 continue;
 
-
-            if (hero->getName() == HeroName::GUARDIAN)
-                calc_f(world, hero, true);
-            else
-                calc_f(world, hero);
+            calc_f(world, hero);
 
             vector<pair<int, pii> > f_vec;
             for (int row = 0; row < n; row++) {
@@ -520,8 +530,10 @@ void AI::move(World *world) {
         }
     }
 
-    // move
-    vector<Hero*> order;
+
+
+    // ordering
+    order.clear();
 
     for (Hero* hero : world->getMyHeroes())
         if (hero->getName() == HeroName::GUARDIAN)
@@ -548,8 +560,9 @@ void AI::move(World *world) {
         order.push_back(tmp[i].second);
     }
 
-    cerr << order.size() << "DONE\n";
 
+
+    // move
     for (Hero* hero : order) {
 
         Cell cell = hero->getCurrentCell();
@@ -559,27 +572,31 @@ void AI::move(World *world) {
         if (cur_cell.first == -1)
             continue;
 
-        if(hero->getName() == HeroName::GUARDIAN)
-            calc_f(world, hero, true);
-        else
-            calc_f(world, hero);
+        calc_f(world, hero);
 
         cerr << destination[id].first << " , " << destination[id].second << endl;
 
         int dif_with_dest = f[destination[id].first][destination[id].second] - f[cur_cell.first][cur_cell.second];
 
         // not a better destination
-        if(dif_with_dest < 5000)
+        if(dif_with_dest < 90000)
             continue;
 
-        auto friend_positions = give_friend_positions(world, hero, false);
+        auto friend_positions = give_friend_positions(world, hero, true);
         directions[id] = world->getPathMoveDirections(cur_cell.first, cur_cell.second, destination[id].first,
                                                       destination[id].second, friend_positions);
 
-        //if (directions[id].empty()) {
-        //    directions[id] = world->getPathMoveDirections(cur_cell.first, cur_cell.second, destination[id].first,
-        //                                                  destination[id].second);
-        //}
+        if (directions[id].empty()) {
+            friend_positions = give_friend_positions(world, hero, false);
+            directions[id] = world->getPathMoveDirections(cur_cell.first, cur_cell.second, destination[id].first,
+                                                          destination[id].second, friend_positions);
+        }
+
+        if (directions->empty()) {
+            directions[id] = world->getPathMoveDirections(cur_cell.first, cur_cell.second, destination[id].first,
+                                                          destination[id].second);
+        }
+
         cerr << "Heros ID is " << id << endl;
         cerr << "SIZE OF PATH FROM " << cur_cell.first << ',' << cur_cell.second << " TO " << destination[id].first
              << ',' << destination[id].second << " IS " <<  directions[id].size() << endl;
@@ -611,7 +628,7 @@ void AI::move(World *world) {
             }
 
             // not a good place too move
-            if (dif_with_dest < 50000 && f[cur_cell.first][cur_cell.second] - f[next_cell.first][next_cell.second] > 500000)
+            if (f[cur_cell.first][cur_cell.second] - f[next_cell.first][next_cell.second] > 90000000)
                 continue;
 
             if(world->getAP() - needing - hero->getMoveAPCost() >= 0) {
@@ -624,23 +641,26 @@ void AI::move(World *world) {
     }
 }
 
+
 void AI::action(World *world) {
     cerr << "-action" << endl;
     calcAP(world) ;
     calcDamageTaken(world) ;
     int cnt = 0 ;
     bool dd[10] ;
+    for(int i=0;i<10;i++)
+      dd[i] = false ;
 
     for(int i = 0 ; i < world->getMyHeroes().size() ;i++) {
         Hero* my_hero = world->getMyHeroes()[i];
-        dd[cnt] = false ;
+
         if(my_hero->getName() == HeroName::BLASTER)
         {
           Ability abil = my_hero->getAbility(AbilityName::BLASTER_DODGE) ;
 
-          if(damage_taken[cnt] > damage_deal[cnt] || damage_taken[i] >= my_hero->getCurrentHP())
+          if(damage_taken[cnt] > damage_deal[cnt] || (damage_taken[i] >= my_hero->getCurrentHP() && damage_taken[cnt] == damage_deal[cnt]))
           {
-            if(abil.isReady())
+            if(abil.isReady() && !dd[cnt])
             {
               world->castAbility(*my_hero, AbilityName::BLASTER_DODGE, dodge_place(world,my_hero) );
               dd[cnt] = true ;
@@ -654,9 +674,9 @@ void AI::action(World *world) {
             world->castAbility(*my_hero, AbilityName::BLASTER_ATTACK, vec[cnt].second);
         }
         else {
-            if (damage_taken[cnt] > damage_deal[cnt] || damage_taken[i] >= my_hero->getCurrentHP()) {
+            if (damage_taken[cnt] > damage_deal[cnt]) {
                 Ability abil = my_hero->getAbility(AbilityName::GUARDIAN_DODGE);
-                if (abil.isReady()) {
+                if (abil.isReady() && !dd[cnt]) {
                     world->castAbility(*my_hero, AbilityName::GUARDIAN_DODGE, dodge_place(world, my_hero));
                     dd[cnt] = true;
                 }
@@ -664,6 +684,7 @@ void AI::action(World *world) {
 
             Ability ability = my_hero->getAbility(AbilityName::GUARDIAN_FORTIFY);
             int ct2 = -1;
+            int ttpp = 7 ;
             int max_damage_taken = 0;
             Cell targetf = Cell::NULL_CELL;
 
@@ -677,8 +698,10 @@ void AI::action(World *world) {
                     continue;
                 max_damage_taken = damage_taken[ct2];
                 targetf = me_hero->getCurrentCell();
+                ttpp = ct2 ;
             }
             if (targetf != Cell::NULL_CELL) {
+                dd[ttpp] = true ;
                 world->castAbility(*my_hero, AbilityName::GUARDIAN_FORTIFY, targetf);
             }
 
@@ -688,5 +711,5 @@ void AI::action(World *world) {
         cnt ++ ;
     }
 
-    printMap(world);
+//    printMap(world);
 }
