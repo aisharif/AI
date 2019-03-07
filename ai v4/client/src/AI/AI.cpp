@@ -6,7 +6,7 @@
 using namespace std;
 
 typedef pair<int, int> pii;
-
+typedef vector<pair<int,Cell> > ArayOfTarget;
 ////////////////////////////////////////////////////
 static vector <pair<int , Cell> > vec;
 
@@ -15,7 +15,7 @@ static vector <pair<int , Cell> > vec;
 static int damage_taken[10] ;
 static int damage_deal[4];
 
-pair<int,Cell> findBestPosWithRange(Hero* my_hero, World* world,Ability abil,int& maxManInArea){
+pair<int,Cell> findBestPosWithRange(Hero* my_hero,vector<Hero*> opposition, World* world,Ability abil,int& maxManInArea){
     Map map = world->getMap();
     int n = map.getRowNum();
     int m = map.getColumnNum();
@@ -25,7 +25,7 @@ pair<int,Cell> findBestPosWithRange(Hero* my_hero, World* world,Ability abil,int
         for(int j = 0 ;j < m;j++){
             if(world->manhattanDistance(map.getCell(i,j), my_hero->getCurrentCell()) <= abil.getRange()){
             int tempNumHero = 0;
-            for (Hero *opp_hero : world->getOppHeroes()){
+            for (Hero *opp_hero : opposition){
 
                 if (opp_hero->getCurrentCell().isInVision())//if hero is seen
                     if (areaCanBomb >= world->manhattanDistance(opp_hero->getCurrentCell(),map.getCell(i,j)))
@@ -42,13 +42,30 @@ pair<int,Cell> findBestPosWithRange(Hero* my_hero, World* world,Ability abil,int
     return targetCellForBomb ;
 }
 
+ArayOfTarget findForAllHeroBestPosWithRange(vector<Hero*> my_heroes, vector<Hero*> opposition,
+        World* world,vector<Ability> abil){
+    ArayOfTarget arayOfTraget;
+    int helpDamageDeal[4],alaki=0;
+    memset(helpDamageDeal,0,sizeof(helpDamageDeal));
+    for(int i = 0 ;i < my_heroes.size();i++){
+        Hero* hero = my_heroes[i];
+        Ability hero_ability = abil[i];
+        arayOfTraget.push_back(findBestPosWithRange(hero,opposition,world,hero_ability,alaki));
+        for(int j = 0 ;j < 4;j++)
+            helpDamageDeal[j]+=damage_deal[j];
+    }
+    for(int i = 0;i < 4;i++)
+        damage_deal[i] = helpDamageDeal[i];
+    return arayOfTraget;
+}
+
 pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index)
 {
     int maxManInArea = 0;
     Ability abil = my_hero->getAbility(AbilityName::BLASTER_BOMB);
     Map map = world->getMap();
     if(abil.isReady()){
-        pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero, world, abil,maxManInArea);
+        pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero,world->getOppHeroes(), world, abil,maxManInArea);
         targetCellForBomb.first = 0 ;
         if(maxManInArea > 0){
             cout<<"$$$$$$$$$$$$$$$$$$$$ BOMB "<<endl;
@@ -59,7 +76,7 @@ pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index)
     }
     maxManInArea = 0;
     abil = my_hero->getAbility(AbilityName::BLASTER_ATTACK);
-    pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero, world, abil, maxManInArea);
+    pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero,world->getOppHeroes(), world, abil, maxManInArea);
     targetCellForBomb.first = 1 ;
     if(maxManInArea > 0 ){
         cout<<"$$$$$$$$$$$$$$$$$$$$ atack "<<endl;
@@ -136,7 +153,7 @@ pair<int,Cell> calcGUARDIAN(Hero* my_hero ,int& ap , World* world,int index){
     Ability abil = my_hero->getAbility(AbilityName::GUARDIAN_ATTACK);
     Map map = world->getMap();
 
-        pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero, world, abil,maxManInArea);
+        pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero,world->getOppHeroes(), world, abil,maxManInArea);
         targetCellForBomb.first = 1;
         if(maxManInArea > 0){
             damage_deal[index] = maxManInArea * abil.getPower();
