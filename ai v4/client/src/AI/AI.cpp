@@ -8,33 +8,50 @@ using namespace std;
 typedef pair<int, int> pii;
 typedef vector<pair<int,Cell> > ArayOfTarget;
 ////////////////////////////////////////////////////
-static vector <pair<int , Cell> > vec;
-
+static pair<int , Cell>  attack_cells[10];
+static vector <int> targets ;
 
 ////////////////// ehsan2
 static int damage_taken[10] ;
-static int damage_deal[4];
+static int damage_deal[10];
+static int ult_cd[10] ;
+static int dodge_cd[10] ;
+
+// TODO Clean find best Pos
+// TODO Priotize Attacks
 
 pair<int,Cell> findBestPosWithRange(Hero* my_hero,vector<Hero*> opposition, World* world,Ability abil,int& maxManInArea){
+    maxManInArea = 0 ;
     Map map = world->getMap();
     int n = map.getRowNum();
     int m = map.getColumnNum();
+    targets.clear() ;
+    vector<int> tar_ids ;
     pair<int,Cell> targetCellForBomb ;
     int areaCanBomb = abil.getAreaOfEffect();
     for(int i = 0 ;i < n ;i++){
         for(int j = 0 ;j < m;j++){
+            tar_ids.clear() ;
             if(world->manhattanDistance(map.getCell(i,j), my_hero->getCurrentCell()) <= abil.getRange()){
+                Cell c1 = my_hero->getCurrentCell() ;
+                Cell c2 = map.getCell(i,j) ;
+              if(abil.isLobbing() == false && world->isInVision(c1 ,c2 ) == false )
+                continue ;
             int tempNumHero = 0;
             for (Hero *opp_hero : opposition){
-
+                Cell c1 = my_hero->getCurrentCell() ;
+                Cell c2 = opp_hero->getCurrentCell() ;
                 if (opp_hero->getCurrentCell().isInVision())//if hero is seen
                     if (areaCanBomb >= world->manhattanDistance(opp_hero->getCurrentCell(),map.getCell(i,j)))
+                    {
                         tempNumHero++;
-
-            }
+                        tar_ids.push_back(opp_hero->getId()) ;
+                    }
+                  }
                 if(tempNumHero >= maxManInArea){
                     targetCellForBomb.second = map.getCell(i,j);
                     maxManInArea = tempNumHero ;
+                    targets = tar_ids ;
                 }
             }
         }
@@ -42,21 +59,56 @@ pair<int,Cell> findBestPosWithRange(Hero* my_hero,vector<Hero*> opposition, Worl
     return targetCellForBomb ;
 }
 
-ArayOfTarget findForAllHeroBestPosWithRange(vector<Hero*> my_heroes, vector<Hero*> opposition,
-        World* world,vector<Ability> abil){
-    ArayOfTarget arayOfTraget;
-    int helpDamageDeal[4],alaki=0;
-    memset(helpDamageDeal,0,sizeof(helpDamageDeal));
-    for(int i = 0 ;i < my_heroes.size();i++){
-        Hero* hero = my_heroes[i];
-        Ability hero_ability = abil[i];
-        arayOfTraget.push_back(findBestPosWithRange(hero,opposition,world,hero_ability,alaki));
-        for(int j = 0 ;j < 4;j++)
-            helpDamageDeal[j]+=damage_deal[j];
-    }
-    for(int i = 0;i < 4;i++)
-        damage_deal[i] = helpDamageDeal[i];
-    return arayOfTraget;
+pair<int,Cell> findBestPosForEnemies(Hero* my_hero, World* world,AbilityConstants* abil,int& maxManInArea){
+
+  maxManInArea = 0 ;
+  Map map = world->getMap();
+  int n = map.getRowNum();
+  int m = map.getColumnNum();
+  targets.clear() ;
+  vector<int> tar_ids ;
+  pair<int,Cell> targetCellForBomb ;
+  Cell c2 = my_hero->getCurrentCell() ;
+  int areaCanBomb = abil->getAreaOfEffect();
+  cout << my_hero->getId() << " " << abil->getName() << " " << areaCanBomb << endl ;
+  cout << c2.getRow() << " " << c2.getColumn() << endl ;
+  for(int i = 0 ;i < n ;i++){
+      for(int j = 0 ;j < m;j++){
+          tar_ids.clear() ;
+          if(world->manhattanDistance(map.getCell(i,j), my_hero->getCurrentCell()) <= abil->getRange()){
+              Cell c1 = my_hero->getCurrentCell() ;
+              Cell c2 = map.getCell(i,j) ;
+              if(abil->isLobbing() == false && world->isInVision(c1 ,c2 ) == false )
+               continue ;
+          int tempNumHero = 0;
+          for (Hero *opp_hero : world->getMyHeroes()){
+              Cell c1 = my_hero->getCurrentCell() ;
+              Cell c2 = opp_hero->getCurrentCell() ;
+              // if ((world->isInVision(c1,c2) && sws) || (!sws && opp_hero->getCurrentCell().isInVision() ))
+              // if (opp_hero->getCurrentCell().isInVision())//if hero is seen
+                  if (areaCanBomb >= world->manhattanDistance(opp_hero->getCurrentCell(),map.getCell(i,j)))
+                  {
+                      tempNumHero++;
+                      tar_ids.push_back(opp_hero->getId()) ;
+                  }
+                }
+              // if(tempNumHero && sws)
+                // cout << "@@@" << tempNumHero << endl ;
+              if(tempNumHero >= maxManInArea){
+                  targetCellForBomb.second = map.getCell(i,j);
+                  maxManInArea = tempNumHero ;
+                  targets = tar_ids ;
+              }
+          }
+      }
+  }
+
+  cout << my_hero->getId() << "=>" << maxManInArea << " ! " ;
+  for(auto id:targets)
+    cout << id <<" " ;
+  cout << endl ;
+
+  return targetCellForBomb ;
 }
 
 pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index)
@@ -68,7 +120,10 @@ pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index)
         pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero,world->getOppHeroes(), world, abil,maxManInArea);
         targetCellForBomb.first = 0 ;
         if(maxManInArea > 0){
-            cout<<"$$$$$$$$$$$$$$$$$$$$ BOMB "<<endl;
+            // cout<<"$$$ BOMB => " << index << " : " ;
+            // for(auto id:targets)
+            //   cout << id <<" " ;
+            // cout << endl ;
             damage_deal[index] = maxManInArea * abil.getPower();
             ap += abil.getAPCost() ;
             return targetCellForBomb;
@@ -79,7 +134,10 @@ pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index)
     pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero,world->getOppHeroes(), world, abil, maxManInArea);
     targetCellForBomb.first = 1 ;
     if(maxManInArea > 0 ){
-        cout<<"$$$$$$$$$$$$$$$$$$$$ atack "<<endl;
+      // cout<<"$$$ ATTACK => " << index << " : " ;
+      // for(auto id:dama)
+      //   cout << id <<" " ;
+      // cout << endl ;
         ap += abil.getAPCost() ;
         damage_deal[index] = maxManInArea * abil.getPower();
         return targetCellForBomb;
@@ -87,61 +145,75 @@ pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index)
 
     targetCellForBomb.first = -1 ;
     targetCellForBomb.second = Cell::NULL_CELL ;
-    damage_deal[index] = maxManInArea ;
+    damage_deal[index] = 0 ;
     return targetCellForBomb;
 }
 
+AbilityConstants* findAbility(AbilityName an , World* world)
+{
+  auto vec = world->getAbilityConstants() ;
+  for(auto u:vec)
+  {
+    if(u->getName() == an)
+      return u;
+  }
+}
 
 void calcDamageTaken(World* world)
 {
-  int min_dist = 1000000 ;
-  for(int i=0;i<6;i++)
+  for(int i=0;i<10;i++)
     damage_taken[i] = 0 ;
+  double p ;
   for (Hero *opp_hero : world->getOppHeroes()) {
       if (opp_hero->getCurrentCell().isInVision())//if hero is seen
       {
-        int ct=0 ;
-        int rr = 5 ;
-        for(Hero* my_hero : world->getMyHeroes()) {
-          if (min_dist > world->manhattanDistance(opp_hero->getCurrentCell(),
-                                                  my_hero->getCurrentCell())) {
-              min_dist = world->manhattanDistance(opp_hero->getCurrentCell(),
-                                                  my_hero->getCurrentCell());
-              rr = ct ;
-          }
-          ct ++ ;
-        }
-        if(rr==5) continue ;
-        int rn , dj ;
-
+        AbilityConstants* abil ;
+        int tmp ;
+        pair<int,Cell> targetCellForBomb ;
         switch (opp_hero->getName()) {
             case HeroName::HEALER:
-                rn = 4 ;
-                dj = 25 ;
+                p = 1;
+                if(ult_cd[opp_hero->getId()]<=0)
+                  p=1/3;
+                abil = findAbility(AbilityName::HEALER_ATTACK , world);
+                targetCellForBomb = findBestPosForEnemies(opp_hero, world, abil,tmp);
+                for(auto id:targets)
+                 damage_taken[id] += p*abil->getPower() ;
                 break;
             case HeroName::BLASTER:
-                rn = 5 ;
-                dj = 20 ;
+                if(ult_cd[opp_hero->getId()]<=0)
+                  abil = findAbility(AbilityName::BLASTER_BOMB, world);
+                else
+                  abil = findAbility(AbilityName::BLASTER_ATTACK, world);
+                targetCellForBomb = findBestPosForEnemies(opp_hero, world, abil,tmp);
+                for(auto id:targets)
+                  damage_taken[id] += abil->getPower() ;
                 break;
             case HeroName::GUARDIAN:
-                rn = 2 ;
-                dj = 40 ;
+                p = 1;
+                if(ult_cd[opp_hero->getId()]<=0)
+                  p=1/2;
+                abil = findAbility(AbilityName::GUARDIAN_ATTACK, world);
+                targetCellForBomb = findBestPosForEnemies(opp_hero, world, abil,tmp);
+                for(auto id:targets)
+                  damage_taken[id] += p*abil->getPower() ;
                 break;
             case HeroName::SENTRY:
-                rn = 7 ;
-                dj = 30 ;
+                if(ult_cd[opp_hero->getId()]<=0)
+                  abil = findAbility(AbilityName::SENTRY_RAY, world);
+                else
+                  abil = findAbility(AbilityName::SENTRY_ATTACK, world);
+                targetCellForBomb = findBestPosForEnemies(opp_hero, world, abil,tmp);
+                for(auto id:targets)
+                  damage_taken[id] += abil->getPower() ;
                 break;
-        }
-
-        if(min_dist<=rn)
-        {
-          damage_taken[rr] += dj ;
         }
       }
   }
 }
 //////////////ehsan2
 
+// TODO ADD healer
 
 pair<int,Cell> calcHEALER(Hero* my_hero ,int& ap , World* world)
 {
@@ -170,18 +242,20 @@ pair<int,Cell> calcGUARDIAN(Hero* my_hero ,int& ap , World* world,int index){
 
 int calcAP(World* world){
   int ap = 0 ;
-  vec.clear() ;
+  for(int i=0;i<10;i++)
+    attack_cells[i] = make_pair(-1,Cell::NULL_CELL) ;
   for(int index = 0; index < world->getMyHeroes().size() ;index ++) {
     Hero* hero = world->getMyHeroes()[index];
+    int cnt = hero->getId() ;
       switch (hero->getName()) {
           case HeroName::HEALER:
-              vec.push_back(calcHEALER(hero, ap, world));
+              attack_cells[cnt] = calcHEALER(hero, ap, world);
               break;
           case HeroName::BLASTER:
-              vec.push_back(calcBLASTER(hero, ap, world,index));
+              attack_cells[cnt] = calcBLASTER(hero, ap, world,cnt);
               break;
           case HeroName::GUARDIAN:
-              vec.push_back(calcGUARDIAN(hero, ap, world,index));
+              attack_cells[cnt] = calcGUARDIAN(hero, ap, world,cnt);
               break;
       }
   }
@@ -194,7 +268,6 @@ int const N = 111;
 static int f[N][N] , fp[N][N];
 static pair<int, int> destination[11];
 static vector<Direction> directions[11];
-
 
 void printMap(World* world){
     Map map = world->map();
@@ -398,7 +471,7 @@ void calc_f(World* world, Hero* hero){
 
 }
 
-Cell dodge_place(World* world, Hero* hero) {
+Cell find_dodge_pos(World* world, Hero* hero) {
     calc_f(world, hero);
 
     Map map = world->getMap();
@@ -446,6 +519,8 @@ void AI::preProcess(World *world) {
     Map map = world->getMap();
     int n = map.getRowNum();
     int m = map.getColumnNum();
+    for(int i=0;i<10;i++)
+      ult_cd[i] = 0 , dodge_cd[i] = 0 ;
 
     // wall
     for (int row = 0; row < n; row++) {
@@ -503,6 +578,30 @@ void AI::move(World *world) {
 
     int needing = calcAP(world);
 
+    if (world->getMovePhaseNum() == 1)
+    {
+      auto ca = world->getOppCastAbilities();
+      for(auto u : ca)
+      {
+        int id = u->getCasterId() ;
+        AbilityName an = u->getAbilityName() ;
+        if(id<0 || id>10)
+          continue ;
+        if(an == AbilityName::BLASTER_DODGE ||
+          an == AbilityName::GUARDIAN_DODGE ||
+        an == AbilityName::SENTRY_DODGE ||
+      an == AbilityName::HEALER_DODGE)
+        dodge_cd[id] = findAbility(an , world)->getCooldown() ;
+        if(an == AbilityName::BLASTER_BOMB ||
+          an == AbilityName::GUARDIAN_FORTIFY ||
+        an == AbilityName::SENTRY_RAY ||
+      an == AbilityName::HEALER_HEAL)
+        ult_cd[id] = findAbility(an , world)->getCooldown() ;
+      }
+      for(int i=0;i<10;i++)
+        ult_cd[i]-- , dodge_cd[i]--;
+    }
+
     // ordering
     vector<Hero*> order;
 
@@ -540,8 +639,8 @@ void AI::move(World *world) {
 
             sort(f_vec.begin(), f_vec.end());
             destination[id] = f_vec[f_vec.size() - 1].second;
-            cerr << cur_cell.first << ',' << cur_cell.second << " ---> " << destination[id].first << ','
-                 << destination[id].second << endl;
+      //      cerr << cur_cell.first << ',' << cur_cell.second << " ---> " << destination[id].first << ','
+          //       << destination[id].second << endl;
 
 
         }
@@ -591,7 +690,7 @@ void AI::move(World *world) {
 
         calc_f(world, hero);
 
-        cerr << destination[id].first << " , " << destination[id].second << endl;
+        //cerr << destination[id].first << " , " << destination[id].second << endl;
 
         int dif_with_dest = f[destination[id].first][destination[id].second] - f[cur_cell.first][cur_cell.second];
 
@@ -614,9 +713,9 @@ void AI::move(World *world) {
                                                           destination[id].second);
         }
 
-        cerr << "Heros ID is " << id << endl;
-        cerr << "SIZE OF PATH FROM " << cur_cell.first << ',' << cur_cell.second << " TO " << destination[id].first
-             << ',' << destination[id].second << " IS " <<  directions[id].size() << endl;
+        //cerr << "Heros ID is " << id << endl;
+      //  cerr << "SIZE OF PATH FROM " << cur_cell.first << ',' << cur_cell.second << " TO " << destination[id].first
+      //       << ',' << destination[id].second << " IS " <<  directions[id].size() << endl;
 
         //for (auto dir : directions[id]) {
             auto dir = directions[id][0];
@@ -624,25 +723,25 @@ void AI::move(World *world) {
             pii next_cell = cur_cell;
 
 
-            cerr << "MOVE COMMAND TOWARD ";
-            switch (dir) {
-                case Direction::DOWN:
-                    cerr << "Down\n";
-                    next_cell.first++;
-                    break;
-                case Direction::UP:
-                    cerr << "Up\n";
-                    next_cell.first--;
-                    break;
-                case Direction::RIGHT:
-                    cerr << "Right\n";
-                    next_cell.second++;
-                    break;
-                case Direction::LEFT:
-                    cerr << "Left\n";
-                    next_cell.second--;
-                    break;
-            }
+        //    cerr << "MOVE COMMAND TOWARD ";
+            // switch (dir) {
+            //     case Direction::DOWN:
+            //         cerr << "Down\n";
+            //         next_cell.first++;
+            //         break;
+            //     case Direction::UP:
+            //         cerr << "Up\n";
+            //         next_cell.first--;
+            //         break;
+            //     case Direction::RIGHT:
+            //         cerr << "Right\n";
+            //         next_cell.second++;
+            //         break;
+            //     case Direction::LEFT:
+            //         cerr << "Left\n";
+            //         next_cell.second--;
+            //         break;
+            // }
 
             // not a good place too move
             if (f[cur_cell.first][cur_cell.second] - f[next_cell.first][next_cell.second] > 90000000)
@@ -663,50 +762,45 @@ void AI::action(World *world) {
     cerr << "-action" << endl;
     calcAP(world) ;
     calcDamageTaken(world) ;
-    int cnt = 0 ;
+    int cnt ;
     bool dd[10] ;
     for(int i=0;i<10;i++)
       dd[i] = false ;
 
     for(int i = 0 ; i < world->getMyHeroes().size() ;i++) {
         Hero* my_hero = world->getMyHeroes()[i];
-
+        cnt = my_hero->getId() ;
+        cout << "??? " << cnt << " " << my_hero->getName() << " => " << damage_taken[cnt] <<" ||| " << damage_deal[cnt] << endl ;
         if(my_hero->getName() == HeroName::BLASTER)
         {
           Ability abil = my_hero->getAbility(AbilityName::BLASTER_DODGE) ;
 
-          if(damage_taken[cnt] > damage_deal[cnt] || (damage_taken[i] >= my_hero->getCurrentHP() && damage_taken[cnt] == damage_deal[cnt]))
+          if(damage_taken[cnt] > damage_deal[cnt])
           {
             if(abil.isReady() && !dd[cnt])
             {
-              world->castAbility(*my_hero, AbilityName::BLASTER_DODGE, dodge_place(world,my_hero) );
+              world->castAbility(*my_hero, AbilityName::BLASTER_DODGE, find_dodge_pos(world,my_hero) );
               dd[cnt] = true ;
             }
 
           }
 
-          if(vec[cnt].first == 0)
-            world->castAbility(*my_hero, AbilityName::BLASTER_BOMB, vec[cnt].second);
-          else if(vec[cnt].first == 1)
-            world->castAbility(*my_hero, AbilityName::BLASTER_ATTACK, vec[cnt].second);
+          if(attack_cells[cnt].first == 0)
+            world->castAbility(*my_hero, AbilityName::BLASTER_BOMB, attack_cells[cnt].second);
+          else if(attack_cells[cnt].first == 1)
+            world->castAbility(*my_hero, AbilityName::BLASTER_ATTACK, attack_cells[cnt].second);
         }
         else {
-            if (damage_taken[cnt] > damage_deal[cnt]) {
-                Ability abil = my_hero->getAbility(AbilityName::GUARDIAN_DODGE);
-                if (abil.isReady() && !dd[cnt]) {
-                    world->castAbility(*my_hero, AbilityName::GUARDIAN_DODGE, dodge_place(world, my_hero));
-                    dd[cnt] = true;
-                }
-            }
+
 
             Ability ability = my_hero->getAbility(AbilityName::GUARDIAN_FORTIFY);
-            int ct2 = -1;
+            int ct2 ;
             int ttpp = 7 ;
             int max_damage_taken = 0;
             Cell targetf = Cell::NULL_CELL;
 
             for (Hero *me_hero : world->getMyHeroes()) {
-                ct2++;
+                ct2 = me_hero->getId() ;
                 if (dd[ct2] || damage_taken[ct2] == 0 || world->manhattanDistance(me_hero->getCurrentCell(),
                                                                                   my_hero->getCurrentCell()) >
                                                          ability.getRange())
@@ -722,11 +816,18 @@ void AI::action(World *world) {
                 world->castAbility(*my_hero, AbilityName::GUARDIAN_FORTIFY, targetf);
             }
 
-            if (vec[cnt].first == 1)
-                world->castAbility(*my_hero, AbilityName::GUARDIAN_ATTACK, vec[cnt].second);
+            if (damage_taken[cnt] > damage_deal[cnt]) {
+                Ability abil = my_hero->getAbility(AbilityName::GUARDIAN_DODGE);
+                if (abil.isReady() && !dd[cnt]) {
+                    world->castAbility(*my_hero, AbilityName::GUARDIAN_DODGE, find_dodge_pos(world, my_hero));
+                    dd[cnt] = true;
+                }
+            }
+
+            if (attack_cells[cnt].first == 1)
+                world->castAbility(*my_hero, AbilityName::GUARDIAN_ATTACK, attack_cells[cnt].second);
         }
-        cnt ++ ;
     }
 
-//    printMap(world);
+    printMap(world);
 }
