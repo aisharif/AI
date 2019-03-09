@@ -48,6 +48,9 @@ void TurnMessage::update_game(World *_game) {
     }
 
     _game->map()._set_cells(output_map_cells);
+    for (std::vector<Cell*> row : output_map_cells)
+        for(Cell * cell:row)
+            delete cell;
 
 //    for(std::vector<Cell *> _row : _game->map().getCells()){
 //        for(Cell * _cell : _row){
@@ -73,25 +76,36 @@ void TurnMessage::update_game(World *_game) {
 
         //Cooldowns:
         std::vector<Ability *> _abilities_list;
-        Json::Value& cooldowns_DATA = hero_DATA["cooldowns"];
-        for (int j = 0; j < cooldowns_DATA.size(); ++j){
-            AbilityName _ability = convert_abilityName_from_string(cooldowns_DATA[j]["name"].asString());
+        if(hero_DATA.isMember("cooldowns")) {
+            Json::Value &cooldowns_DATA = hero_DATA["cooldowns"];
+            for (int j = 0; j < cooldowns_DATA.size(); ++j) {
+                AbilityName _ability = convert_abilityName_from_string(cooldowns_DATA[j]["name"].asString());
 
-            Ability* newAbility = new Ability;
+                Ability *newAbility = new Ability;
 
-            newAbility->_abilityConstants = _game->getAbilityConstants(_ability);
-            newAbility->_remCooldown = cooldowns_DATA[j]["remCooldown"].asInt();
+                newAbility->_abilityConstants = _game->getAbilityConstants(_ability);
+                newAbility->_remCooldown = cooldowns_DATA[j]["remCooldown"].asInt();
 
-            _abilities_list.push_back(newAbility);
+                _abilities_list.push_back(newAbility);
+            }
+        } else {
+            for(AbilityName abilityName:output_hero->_heroConstants.getAbilityNames()){
+                Ability *newAbility = new Ability;
+
+                newAbility->_abilityConstants = _game->getAbilityConstants(abilityName);
+                newAbility->_remCooldown = -1;
+
+                _abilities_list.push_back(newAbility);
+            }
         }
         output_hero->set_abilities(_abilities_list);
 
         //currentCell:
         if(hero_DATA.isMember("currentCell")) {
-            output_hero->_currentCell = _game->_map.getCell(hero_DATA["currentCell"]["row"].asInt(),
+            output_hero->_currentCell = _game->_map.getCell_ptr(hero_DATA["currentCell"]["row"].asInt(),
                                                                  hero_DATA["currentCell"]["column"].asInt());
         } else {
-            output_hero->_currentCell = Cell::NULL_CELL;
+            output_hero->_currentCell = &Cell::NULL_CELL;
         }
 
         //recentPath:
@@ -130,25 +144,36 @@ void TurnMessage::update_game(World *_game) {
 
         //Cooldowns:
         std::vector<Ability *> _abilities_list;
-        Json::Value& cooldowns_DATA = hero_DATA["cooldowns"];
-        for (int j = 0; j < cooldowns_DATA.size(); ++j){
-            AbilityName _ability = convert_abilityName_from_string(cooldowns_DATA[j]["name"].asString());
+        if(hero_DATA.isMember("cooldowns")) {
+            Json::Value &cooldowns_DATA = hero_DATA["cooldowns"];
+            for (int j = 0; j < cooldowns_DATA.size(); ++j) {
+                AbilityName _ability = convert_abilityName_from_string(cooldowns_DATA[j]["name"].asString());
 
-            Ability* newAbility = new Ability;
+                Ability *newAbility = new Ability;
 
-            newAbility->_abilityConstants = _game->getAbilityConstants(_ability);
-            newAbility->_remCooldown = cooldowns_DATA[j]["remCooldown"].asInt();
+                newAbility->_abilityConstants = _game->getAbilityConstants(_ability);
+                newAbility->_remCooldown = cooldowns_DATA[j]["remCooldown"].asInt();
 
-            _abilities_list.push_back(newAbility);
+                _abilities_list.push_back(newAbility);
+            }
+        } else {
+            for(AbilityName abilityName:output_hero->_heroConstants.getAbilityNames()){
+                Ability *newAbility = new Ability;
+
+                newAbility->_abilityConstants = _game->getAbilityConstants(abilityName);
+                newAbility->_remCooldown = -1;
+
+                _abilities_list.push_back(newAbility);
+            }
         }
         output_hero->set_abilities(_abilities_list);
 
         //currentCell:
         if(hero_DATA.isMember("currentCell")) {
-            output_hero->_currentCell = _game->_map.getCell(hero_DATA["currentCell"]["row"].asInt(),
+            output_hero->_currentCell = _game->_map.getCell_ptr(hero_DATA["currentCell"]["row"].asInt(),
                                                                  hero_DATA["currentCell"]["column"].asInt());
         } else {
-            output_hero->_currentCell = Cell::NULL_CELL;
+            output_hero->_currentCell = &Cell::NULL_CELL;
         }
 
         //recentPath:

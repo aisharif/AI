@@ -7,5 +7,3 @@ cmake-build-release/
 
 # Manual build directory
 build/
-AI2/
-CMakeFiles/
