@@ -5,6 +5,10 @@
 
 using namespace std;
 
+
+// salam man sina hastam :)
+
+
 typedef pair<int, int> pii;
 typedef vector<pair<int,Cell> > ArayOfTarget;
 ////////////////////////////////////////////////////
