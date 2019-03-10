@@ -335,7 +335,7 @@ bool inside_map(int n, int m, int r, int c) {
     return r >= 0 && r < n && c >= 0 && c < m;
 }
 
-vector<Cell *> give_friend_positions(World *world, Hero* hero, bool near) {
+vector<Cell*> give_friend_positions(World *world, Hero* hero, bool near) {
     Map map = world->getMap();
     vector<Cell *> ret;
 
@@ -373,9 +373,9 @@ vector<Cell *> give_friend_positions(World *world, Hero* hero, bool near) {
 
 static const int dr[5] = {-1, 0, 1, 0};
 static const int dc[5] = {0, 1, 0, -1};
-vector<ppi> give_dis (vector<pii> starting_cells, int max_distance, Map &map, bool is_wall_avoided = true
+vector<ppi> give_dis(vector<pii> starting_cells, int max_distance, Map &map, bool is_wall_avoided = true
         , vector<pii> avoiding_cells = vector<pii>()) {
-    deque<pii> q;
+    queue<pii> q;
     int n = map.getRowNum(), m = map.getColumnNum();
     int dis[N][N];
     bool is_avoiding[N][N];
@@ -384,14 +384,11 @@ vector<ppi> give_dis (vector<pii> starting_cells, int max_distance, Map &map, bo
         for (int j = 0; j < N; j++)
             dis[i][j] = INF, is_avoiding[i][j] = false;
 
-    for (pii x : starting_cells) {
-        q.push_back(x);
-        dis[x.first][x.second] = 0;
-    }
+    for (pii x : starting_cells)
+        q.push(x), dis[x.first][x.second] = 0;
 
-    for (pii x : avoiding_cells) {
+    for (pii x : avoiding_cells)
         is_avoiding[x.first][x.second] = true;
-    }
 
     if (is_wall_avoided)
         for (int r = 0; r < n; r++)
@@ -399,33 +396,27 @@ vector<ppi> give_dis (vector<pii> starting_cells, int max_distance, Map &map, bo
                 if (map.getCell(r, c).isWall())
                     is_avoiding[r][c] = true;
 
-    cerr << "BFS PREPROCESS DONE\n";
-
     while (!q.empty()) {
         int r = q.front().first;
         int c = q.front().second;
-        int d = dis[r][c];
-        q.pop_front();
-        if (d == max_distance)
+        q.pop();
+        if (dis[r][c] == max_distance)
             continue;
+
         for (int i = 0; i < 4; i++) {
             int new_r = r + dr[i], new_c = c + dc[i];
-            if (!inside_map(n, m, new_r, new_c) || dis[new_r][new_c] <= dis[r][c] || is_avoiding[new_r][new_c])
+            if (!inside_map(n, m, new_r, new_c) || dis[new_r][new_c] <= dis[r][c] + 1 || is_avoiding[new_r][new_c])
                 continue;
-            q.push_back({new_r, new_c});
-            dis[new_r][new_c] = d + 1;
+            q.push({new_r, new_c});
+            dis[new_r][new_c] = dis[r][c] + 1;
         }
     }
-
-    cerr << "BFS WHILE DONE\n";
 
     vector<ppi> ret;
     for (int r = 0; r < n; r++)
         for (int c = 0; c < m; c++)
             if (dis[r][c] != INF)
                 ret.push_back({{r, c}, dis[r][c]});
-
-    cerr << "BFS DONE\n";
 
     return ret;
 }
@@ -450,13 +441,9 @@ void calc_f(World* world, Hero* hero){
 
     int hero_range = get_attack_range(hero, world);
 
-    cout << "!!!!!!!!! " << 0 << endl;
-
     for (int i = 0; i < n; i++)
         for (int j = 0; j < m; j++)
             f[i][j] = fp[i][j];
-
-    cout << "!!!!!!!!! " << 1 << endl;
 
     // near friend
     for (Hero* hero_friend : world->getMyHeroes()) {
@@ -473,8 +460,6 @@ void calc_f(World* world, Hero* hero){
             }
         }
     }
-
-    cout << "!!!!!!!!! " << 2 << endl;
 
     // enemy occupation
     for (Hero *enemy_hero : world->getOppHeroes()) {
@@ -494,8 +479,6 @@ void calc_f(World* world, Hero* hero){
                 occupation ++;
             }
         }
-
-        cout << "!!!!!!!!! " << 3 << endl;
 
         vector<ppi> near = give_dis({{r, c}}, range, map, false);
 
@@ -527,9 +510,6 @@ void calc_f(World* world, Hero* hero){
         }
     }
 
-
-    cout << "!!!!!!!!! " << 4 << endl;
-
     // near other destinations
     for (Hero* hero_friend : world->getMyHeroes()) {
         if (hero == hero_friend)
@@ -550,14 +530,10 @@ void calc_f(World* world, Hero* hero){
         }
     }
 
-    cout << "!!!!!!!!! " << 5 << endl;
-
     // near to me
     Cell cell = hero->getCurrentCell();
     int row = cell.getRow(), column = cell.getColumn();
     vector<ppi> near = give_dis({{row, column}}, 100, map);
-
-    cout << "SIZE OF NEAR = " << near.size() << endl;
 
     for (ppi a : near) {
         int r = a.first.first, c = a.first.second;
@@ -567,7 +543,42 @@ void calc_f(World* world, Hero* hero){
         f[r][c] += 100 - d;
     }
 
-    cout << "!!!!!!!!! " << 6 << endl;
+    // HEALER
+    if (hero->getName() == HeroName::HEALER && hero->getAbility(AbilityName::HEALER_HEAL).isReady()) {
+        int range = findAbility(AbilityName::HEALER_HEAL, world)->getRange();
+        for (Hero* friend_hero : world->getMyHeroes()) {
+            if (hero->getName() == HeroName::HEALER)
+                continue;
+            int row = friend_hero->getCurrentCell().getRow();
+            int column = friend_hero->getCurrentCell().getColumn();
+            vector<ppi> near = give_dis({{row, column}}, range, map, false);
+            for (ppi a : near) {
+                int r = a.first.first, c = a.first.second;
+                int d = a.second;
+                f[r][c] += 100000 + (range - d + 1) * 100;
+            }
+        }
+
+    }
+
+
+    // TANK
+    if (hero->getName() == HeroName::GUARDIAN && hero->getAbility(AbilityName::GUARDIAN_FORTIFY).isReady()) {
+        int range = hero->getAbility(AbilityName::GUARDIAN_ATTACK).getRange();
+        for (Hero* friend_hero : world->getMyHeroes()) {
+            if (hero->getName() == HeroName::GUARDIAN)
+                continue;
+            int row = friend_hero->getCurrentCell().getRow();
+            int column = friend_hero->getCurrentCell().getColumn();
+            vector<ppi> near = give_dis({{row, column}}, range, map, false);
+            for (ppi a : near) {
+                int r = a.first.first, c = a.first.second;
+                int d = a.second;
+                f[r][c] += 100000 + (range - d + 1) * 100;
+            }
+        }
+    }
+
 }
 
 Cell find_dodge_pos(World* world, Hero* hero) {
@@ -676,7 +687,6 @@ void AI::pick(World *world) {
 
 }
 
-// TODO Try to close Heroes ( not chaspide be ham !)
 
 void AI::move(World *world) {
     Map map = world->getMap();
@@ -685,7 +695,8 @@ void AI::move(World *world) {
 
     int needing = calcAP(world);
 
-    /*
+
+    /////////////////////////////////////////////////////////////////////
     if (world->getMovePhaseNum() == 0)
     {
       cout <<" ### "<< endl ;
@@ -710,8 +721,7 @@ void AI::move(World *world) {
       for(int i=0;i<10;i++)
         ult_cd[i]-- , dodge_cd[i]--;
     }
-    */
-
+    //////////////////////////////////////////////////////////////////////
 
 
 
@@ -723,11 +733,11 @@ void AI::move(World *world) {
             order.push_back(hero);
 
     for (Hero* hero : world->getMyHeroes())
-        if (hero->getName() == HeroName::BLASTER)
+        if (hero->getName() == HeroName::HEALER)
             order.push_back(hero);
 
     for (Hero* hero : world->getMyHeroes())
-        if (hero->getName() == HeroName::HEALER)
+        if (hero->getName() == HeroName::BLASTER)
             order.push_back(hero);
 
 
@@ -807,9 +817,9 @@ void AI::move(World *world) {
         int dif_with_dest = f[destination[id].first][destination[id].second] - f[cur_cell.first][cur_cell.second];
 
         // not a better destination
-        /*if(dif_with_dest < 90000)
+        if (dif_with_dest < 200000)
             continue;
-        */
+
 
         auto friend_positions = give_friend_positions(world, hero, true);
         directions[id] = world->getPathMoveDirections(cur_cell.first, cur_cell.second, destination[id].first,
