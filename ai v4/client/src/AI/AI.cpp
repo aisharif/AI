@@ -5,6 +5,8 @@
 
 using namespace std;
 
+#define PICK_TANK 1
+#define PICK_HEALER 0
 
 typedef pair<int, int> pii;
 typedef vector<pair<int,Cell> > ArayOfTarget;
@@ -597,10 +599,16 @@ void AI::pick(World *world) {
             world->pickHero(HeroName::BLASTER);
             break;
         case 2:
-            world->pickHero(HeroName::HEALER);
+            if(PICK_HEALER)
+              world->pickHero(HeroName::HEALER);
+            else
+              world->pickHero(HeroName::BLASTER);
             break;
         case 3:
-            world->pickHero(HeroName::GUARDIAN);
+            if(PICK_TANK)
+              world->pickHero(HeroName::GUARDIAN);
+            else
+              world->pickHero(HeroName::BLASTER);
             break;
         default:
             world->pickHero(HeroName::BLASTER);
