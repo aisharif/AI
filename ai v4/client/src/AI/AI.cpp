@@ -855,7 +855,7 @@ void AI::action(World *world) {
                 targetf = me_hero->getCurrentCell();
                 ttpp = ct2 ;
             }
-            if (targetf != Cell::NULL_CELL) {
+            if (targetf != Cell::NULL_CELL && max_damage_taken*2>damage_deal[cnt]*3) {
                 dd[ttpp] = true ;
                 world->castAbility(*my_hero, AbilityName::GUARDIAN_FORTIFY, targetf);
             }
