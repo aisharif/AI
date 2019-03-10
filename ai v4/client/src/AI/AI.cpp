@@ -7,7 +7,9 @@ using namespace std;
 
 
 typedef pair<int, int> pii;
+typedef pair<pii, int> ppi;
 typedef vector<pair<int,Cell> > ArayOfTarget;
+const int INF = 1e9+10;
 ////////////////////////////////////////////////////
 static pair<int , Cell>  attack_cells[10];
 static vector <int> targets ;
@@ -303,7 +305,7 @@ int calcAP(World* world){
 
 int const N = 111;
 static int f[N][N] , fp[N][N];
-static pair<int, int> destination[11];
+static pii destination[11];
 static vector<Direction> directions[11];
 
 void printMap(World* world){
@@ -367,147 +369,205 @@ vector<Cell *> give_friend_positions(World *world, Hero* hero, bool near) {
     return ret;
 }
 
-// TODO Calc F for each hero !
+
+
+static const int dr[5] = {-1, 0, 1, 0};
+static const int dc[5] = {0, 1, 0, -1};
+vector<ppi> give_dis (vector<pii> starting_cells, int max_distance, Map &map, bool is_wall_avoided = true
+        , vector<pii> avoiding_cells = vector<pii>()) {
+    deque<pii> q;
+    int n = map.getRowNum(), m = map.getColumnNum();
+    int dis[N][N];
+    bool is_avoiding[N][N];
+
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++)
+            dis[i][j] = INF, is_avoiding[i][j] = false;
+
+    for (pii x : starting_cells) {
+        q.push_back(x);
+        dis[x.first][x.second] = 0;
+    }
+
+    for (pii x : avoiding_cells) {
+        is_avoiding[x.first][x.second] = true;
+    }
+
+    if (is_wall_avoided)
+        for (int r = 0; r < n; r++)
+            for (int c = 0; c < m; c++)
+                if (map.getCell(r, c).isWall())
+                    is_avoiding[r][c] = true;
+
+    cerr << "BFS PREPROCESS DONE\n";
+
+    while (!q.empty()) {
+        int r = q.front().first;
+        int c = q.front().second;
+        int d = dis[r][c];
+        q.pop_front();
+        if (d == max_distance)
+            continue;
+        for (int i = 0; i < 4; i++) {
+            int new_r = r + dr[i], new_c = c + dc[i];
+            if (!inside_map(n, m, new_r, new_c) || dis[new_r][new_c] <= dis[r][c] || is_avoiding[new_r][new_c])
+                continue;
+            q.push_back({new_r, new_c});
+            dis[new_r][new_c] = d + 1;
+        }
+    }
+
+    cerr << "BFS WHILE DONE\n";
+
+    vector<ppi> ret;
+    for (int r = 0; r < n; r++)
+        for (int c = 0; c < m; c++)
+            if (dis[r][c] != INF)
+                ret.push_back({{r, c}, dis[r][c]});
+
+    cerr << "BFS DONE\n";
+
+    return ret;
+}
+
+int get_attack_range(Hero* hero, World *world) {
+    switch (hero->getName()) {
+        case HeroName::BLASTER:
+            return findAbility(AbilityName::BLASTER_ATTACK, world)->getRange();
+        case HeroName::GUARDIAN:
+            return findAbility(AbilityName::GUARDIAN_ATTACK, world)->getRange();
+        case HeroName::HEALER:
+            return findAbility(AbilityName::HEALER_ATTACK, world)->getRange();
+        case HeroName::SENTRY:
+            return findAbility(AbilityName::SENTRY_ATTACK, world)->getRange();
+    }
+}
 
 void calc_f(World* world, Hero* hero){
     Map map = world->getMap();
     int n = map.getRowNum();
     int m = map.getColumnNum();
 
-    bool istank = (hero->getName() == HeroName::GUARDIAN);
+    int hero_range = get_attack_range(hero, world);
 
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
+    cout << "!!!!!!!!! " << 0 << endl;
+
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < m; j++)
             f[i][j] = fp[i][j];
-        }
-    }
+
+    cout << "!!!!!!!!! " << 1 << endl;
 
     // near friend
     for (Hero* hero_friend : world->getMyHeroes()) {
         if (hero == hero_friend)
             continue;
-        int friend_row = hero_friend->getCurrentCell().getRow();
-        int friend_column = hero_friend->getCurrentCell().getColumn();
-        for (int dr = -2; dr <= 2; dr++) {
-            for (int dc = -2; dc <= 2; dc++) {
-
-                int dis_with_friend = abs(dr) + abs(dc);
-                if(dis_with_friend > 2)
-                    continue;
-
-                int r = friend_row + dr;
-                int c = friend_column + dc;
-                if(!inside_map(map.getRowNum(), map.getColumnNum(), r, c))
-                    continue;
-
-                f[r][c] -= (3 - dis_with_friend) * 20000000;
+        Cell cell = hero_friend->getCurrentCell();
+        int r = cell.getRow(), c = cell.getColumn();
+        vector<pair<pii, int>> near = give_dis({{r, c}}, 1, map);
+        for (ppi a : near) {
+            if(a.second == 0) {
+                f[r][c] -= 10000000;
+            }else {
+                f[r][c] -= 1000000;
             }
         }
     }
+
+    cout << "!!!!!!!!! " << 2 << endl;
+
+    // enemy occupation
+    for (Hero *enemy_hero : world->getOppHeroes()) {
+        Cell cell = enemy_hero->getCurrentCell();
+        int r = cell.getRow(), c = cell.getColumn();
+        if (r == -1)
+            continue;
+
+        int range = get_attack_range(enemy_hero, world);
+        int occupation = 0;
+        for (Hero *friend_hero : world->getMyHeroes()) {
+            Cell cell = friend_hero->getCurrentCell();
+            int friend_r = cell.getRow(), friend_c = cell.getColumn();
+            if (friend_r == -1)
+                continue;
+            if (world->manhattanDistance(r, c, friend_r, friend_r) <= range) {
+                occupation ++;
+            }
+        }
+
+        cout << "!!!!!!!!! " << 3 << endl;
+
+        vector<ppi> near = give_dis({{r, c}}, range, map, false);
+
+        if (occupation < 2) {
+            for (ppi a : near) {
+                int r = a.first.first, c = a.first.second;
+                int d = a.second;
+                switch (occupation) {
+                    case 0:
+                        f[r][c] -= 1000000 * d;
+                        break;
+                    case 1:
+                        f[r][c] -= 100000 * d;
+                        break;
+                }
+            }
+        } else {
+            vector<ppi> near = give_dis({{r, c}}, hero_range, map, false);
+            for (ppi a : near) {
+                int r = a.first.first, c = a.first.second;
+                int d = a.second;
+
+                if (hero->getName() == HeroName::GUARDIAN) {
+                    f[r][c] += occupation * occupation * occupation * 100000 * (hero_range - d + 1);
+                }else {
+                    f[r][c] += occupation * occupation * occupation * 100000 * (d + 1);
+                }
+            }
+        }
+    }
+
+
+    cout << "!!!!!!!!! " << 4 << endl;
 
     // near other destinations
     for (Hero* hero_friend : world->getMyHeroes()) {
         if (hero == hero_friend)
             continue;
         int id = hero_friend->getId();
+        Cell cell = hero_friend->getCurrentCell();
         int friend_dest_row = destination[id].first;
         int friend_dest_column = destination[id].second;
 
-        for (int dr = -2; dr <= 2; dr++) {
-            for (int dc = -2; dc <= 2; dc++) {
+        if(cell.getRow() == -1)
+            continue;
 
-                int dis_with_friend = abs(dr) + abs(dc);
-                if(dis_with_friend > 2)
-                    continue;
-
-                int r = friend_dest_row + dr;
-                int c = friend_dest_column + dc;
-                if(!inside_map(map.getRowNum(), map.getColumnNum(), r, c))
-                    continue;
-
-                f[r][c] -= (3 - dis_with_friend) * 1000000;
-            }
-        }
-
-    }
-
-    // near enemy
-    int const INF = 1111;
-    int fl[N][N];
-    for (int i = 0; i < n; i++)
-        for (int j = 0; j < m; j++)
-            fl[i][j] = INF;
-
-
-    for (Hero *hero_enemy : world->getOppHeroes()) {
-
-        int enemy_row = hero_enemy->getCurrentCell().getRow();
-        int enemy_column = hero_enemy->getCurrentCell().getColumn();
-
-        for (int dr = -5; dr <= 5; dr++) {
-            for (int dc = -5; dc <= 5; dc++) {
-
-                int dis_with_enemy = abs(dr) + abs(dc);
-                if (dis_with_enemy > 5)
-                    continue;
-
-                int r = enemy_row + dr;
-                int c = enemy_column + dc;
-                if (!inside_map(map.getRowNum(), map.getColumnNum(), r, c))
-                    continue;
-
-                fl[r][c] = min(fl[r][c], dis_with_enemy);
-                // f[r][c] += 100000;
-                // f[r][c] += (5 - abs(4 - dis_with_enemy)) * 10000;
-            }
+        vector<ppi> near = give_dis({{friend_dest_row, friend_dest_column}}, 1, map);
+        for (ppi a : near) {
+            int r = a.first.first, c = a.first.second;
+            int d = a.second;
+            f[r][c] -= (2 - d) * 10000;
         }
     }
 
-    int range = (istank ? 1 : 4);
+    cout << "!!!!!!!!! " << 5 << endl;
 
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
-            if (fl[i][j] <= range) {
-                f[i][j] += 100000;
-                f[i][j] += fl[i][j] * 10000;
-            }
-        }
+    // near to me
+    Cell cell = hero->getCurrentCell();
+    int row = cell.getRow(), column = cell.getColumn();
+    vector<ppi> near = give_dis({{row, column}}, 100, map);
+
+    cout << "SIZE OF NEAR = " << near.size() << endl;
+
+    for (ppi a : near) {
+        int r = a.first.first, c = a.first.second;
+        int d = a.second;
+        if (d == 0)
+            f[r][c] += 1000;
+        f[r][c] += 100 - d;
     }
 
-
-
-    // near to hero
-    /*
-    for (int row = 0; row < n; row++) {
-        for (int column = 0; column < m; column++) {
-
-            Cell cell = map.getCell(row, column);
-            int hero_row = hero->getCurrentCell().getRow();
-            int hero_column = hero->getCurrentCell().getColumn();
-
-            vector<Cell *> friend_positions;
-            vector<Direction> directions;
-
-            //auto friend_positions = give_friend_positions(world, hero , true);
-            //auto directions = world->getPathMoveDirections(hero_row, hero_column, row, column, friend_positions);
-
-            if (directions.empty()) {
-                friend_positions = give_friend_positions(world, hero , false);
-                directions = world->getPathMoveDirections(hero_row, hero_column, row, column, friend_positions);
-            }
-            if (directions.empty()) {
-                directions = world->getPathMoveDirections(hero_row, hero_column, row, column);
-            }
-            auto dis = directions.size();
-
-
-            //int dis = world->manhattanDistance(hero_row, hero_column, row, column);
-
-            f[row][column] += dis * 10;
-        }
-    }
-    */
-
+    cout << "!!!!!!!!! " << 6 << endl;
 }
 
 Cell find_dodge_pos(World* world, Hero* hero) {
@@ -562,25 +622,32 @@ void AI::preProcess(World *world) {
       ult_cd[i] = 0 , dodge_cd[i] = 0 ;
 
     // wall
-    for (int row = 0; row < n; row++) {
-        for (int column = 0; column < m; column++) {
-            Cell cell = map.getCell(row, column);
-            if (cell.isWall()) {
+    for (int row = 0; row < n; row++)
+        for (int column = 0; column < m; column++)
+            if (map.getCell(row, column).isWall())
                 fp[row][column] -= 1000000000;
-            }
-        }
-    }
 
 
     // objective zone
-    for (int row = 0; row < n; row++) {
-        for (int column = 0; column < m; column++) {
-            Cell cell = map.getCell(row, column);
-            if (cell.isInObjectiveZone()) {
-                fp[row][column] += 100000000;
-            }
+    vector<pii> obj;
+    for (int r = 0; r < n; r++)
+        for (int c = 0; c < m; c++)
+            if (map.getCell(r, c).isInObjectiveZone())
+                obj.push_back({r, c});
+    vector<pair<pii, int> > dis_to_obj = give_dis(obj, 100, map);
+    for (auto a : dis_to_obj) {
+        int r = a.first.first, c = a.first.second;
+        int d = a.second;
+
+        if (d == 0) {
+            // inside objective
+            fp[r][c] += 100000000;
+        }else {
+            // near objective
+            fp[r][c] += (70 - d) * 100;
         }
     }
+
 }
 
 void AI::pick(World *world) {
@@ -618,6 +685,7 @@ void AI::move(World *world) {
 
     int needing = calcAP(world);
 
+    /*
     if (world->getMovePhaseNum() == 0)
     {
       cout <<" ### "<< endl ;
@@ -642,6 +710,10 @@ void AI::move(World *world) {
       for(int i=0;i<10;i++)
         ult_cd[i]-- , dodge_cd[i]--;
     }
+    */
+
+
+
 
     // ordering
     vector<Hero*> order;
@@ -657,6 +729,7 @@ void AI::move(World *world) {
     for (Hero* hero : world->getMyHeroes())
         if (hero->getName() == HeroName::HEALER)
             order.push_back(hero);
+
 
     // calc destination
     if (world->getMovePhaseNum() % 1 == 0) {
@@ -680,8 +753,8 @@ void AI::move(World *world) {
 
             sort(f_vec.begin(), f_vec.end());
             destination[id] = f_vec[f_vec.size() - 1].second;
-      //      cerr << cur_cell.first << ',' << cur_cell.second << " ---> " << destination[id].first << ','
-          //       << destination[id].second << endl;
+            cerr << cur_cell.first << ',' << cur_cell.second << " ---> " << destination[id].first << ','
+                    << destination[id].second << endl;
 
 
         }
@@ -717,8 +790,6 @@ void AI::move(World *world) {
         order.push_back(tmp[i].second);
     }
 
-
-
     // move
     for (Hero* hero : order) {
 
@@ -736,8 +807,9 @@ void AI::move(World *world) {
         int dif_with_dest = f[destination[id].first][destination[id].second] - f[cur_cell.first][cur_cell.second];
 
         // not a better destination
-        if(dif_with_dest < 90000)
+        /*if(dif_with_dest < 90000)
             continue;
+        */
 
         auto friend_positions = give_friend_positions(world, hero, true);
         directions[id] = world->getPathMoveDirections(cur_cell.first, cur_cell.second, destination[id].first,
@@ -754,9 +826,9 @@ void AI::move(World *world) {
                                                           destination[id].second);
         }
 
-        //cerr << "Heros ID is " << id << endl;
-      //  cerr << "SIZE OF PATH FROM " << cur_cell.first << ',' << cur_cell.second << " TO " << destination[id].first
-      //       << ',' << destination[id].second << " IS " <<  directions[id].size() << endl;
+        cerr << "Heros ID is " << id << endl;
+        cerr << "SIZE OF PATH FROM " << cur_cell.first << ',' << cur_cell.second << " TO " << destination[id].first
+             << ',' << destination[id].second << " IS " <<  directions[id].size() << endl;
 
         //for (auto dir : directions[id]) {
             auto dir = directions[id][0];
@@ -785,8 +857,9 @@ void AI::move(World *world) {
             // }
 
             // not a good place too move
-            if (f[cur_cell.first][cur_cell.second] - f[next_cell.first][next_cell.second] > 90000000)
+            /*if (f[cur_cell.first][cur_cell.second] - f[next_cell.first][next_cell.second] > 90000000)
                 continue;
+            */
 
             if(world->getAP() - needing - hero->getMoveAPCost() >= 0) {
                 world->moveHero(hero->getId(), dir);
