@@ -6,9 +6,6 @@
 using namespace std;
 
 
-#define PICK_TANK 1
-#define PICK_HEALER 0
-
 typedef pair<int, int> pii;
 typedef pair<pii, int> ppi;
 typedef vector<pair<int,Cell> > ArayOfTarget;
@@ -16,88 +13,57 @@ const int INF = 1e9+10;
 ////////////////////////////////////////////////////
 static pair<int , Cell>  attack_cells[10];
 static vector <int> targets ;
+
+////////////////// ehsan2
 static int damage_taken[10] ;
 static int damage_deal[10];
 static int ult_cd[10] ;
 static int dodge_cd[10] ;
-static bool sws , sss;
 
 // TODO Clean find best Pos
 // TODO Priotize Attacks
 
-
-AbilityConstants* findAbility(AbilityName an , World* world)
-{
-  auto vec = world->getAbilityConstants() ;
-  for(auto u:vec)
-  {
-    if(u->getName() == an)
-      return u;
-  }
-}
-
-pair<int,int> CalcDamageCell(World* world , AbilityConstants* abil , Cell c , int& maxManInArea,vector<Hero*> opposition)
-{
-  int areaCanBomb = abil->getAreaOfEffect();
-  vector<int> tar_ids ;
-  int tempNumHero = 0;
-  for (Hero *opp_hero : opposition){
-      Cell c2 = opp_hero->getCurrentCell() ;
-      if (opp_hero->getCurrentCell().isInVision())//if hero is seen
-          if (areaCanBomb >= world->manhattanDistance(opp_hero->getCurrentCell(),c) && damage_taken[opp_hero->getId()] < opp_hero->getCurrentHP() ) {
-              tempNumHero++;
-              tar_ids.push_back(opp_hero->getId());
-          }
-      if(tempNumHero >= maxManInArea){
-          maxManInArea = tempNumHero ;
-          targets = tar_ids ;
-          sws = true ;
-      }
-  }
-
-  int dmg_deal = tempNumHero * abil->getPower() ;
-  int cnt_kill = 0 ;
-  for(auto id:tar_ids)
-  {
-    // check if fatal damage
-    if(world->getHero(id).getCurrentHP() - damage_taken[id] > 0 &&
-            world->getHero(id).getCurrentHP() - damage_taken[id]+abil->getPower() <= 0 )
-       cnt_kill++ ;
-    if(sss) damage_taken[id] += abil->getPower() ;
-  }
-
-  return {cnt_kill , dmg_deal} ;
-}
-
-Cell findBestPosforAttack(Cell c1,vector<Hero*> opposition, World* world,AbilityConstants* abil,int& maxManInArea){
+pair<int,Cell> findBestPosWithRange(Hero* my_hero,vector<Hero*> opposition, World* world,Ability abil,int& maxManInArea){
     maxManInArea = 0 ;
-    sss = false;
     Map map = world->getMap();
     int n = map.getRowNum();
     int m = map.getColumnNum();
     targets.clear() ;
-    Cell targetCellForBomb = Cell::NULL_CELL ;
+    vector<int> tar_ids ;
+    pair<int,Cell> targetCellForBomb = {-1 , Cell::NULL_CELL};
+    int areaCanBomb = abil.getAreaOfEffect();
     for(int i = 0 ;i < n ;i++){
         for(int j = 0 ;j < m;j++){
-            if(world->manhattanDistance(map.getCell(i,j), c1) <= abil->getRange()) {
-
-                Cell c2 = map.getCell(i, j);
-                if (abil->isLobbing() == false && world->isInVision(c1, c2) == false)
-                    continue;
-                sws = false;
-                CalcDamageCell(world, abil, map.getCell(i, j), maxManInArea, opposition);
-                if (sws)
-                    targetCellForBomb = map.getCell(i, j);
+            tar_ids.clear() ;
+            if(world->manhattanDistance(map.getCell(i,j), my_hero->getCurrentCell()) <= abil.getRange()){
+                Cell c1 = my_hero->getCurrentCell() ;
+                Cell c2 = map.getCell(i,j) ;
+              if(abil.isLobbing() == false && world->isInVision(c1 ,c2 ) == false )
+                continue ;
+            int tempNumHero = 0;
+            for (Hero *opp_hero : opposition){
+                Cell c1 = my_hero->getCurrentCell() ;
+                Cell c2 = opp_hero->getCurrentCell() ;
+                if (opp_hero->getCurrentCell().isInVision())//if hero is seen
+                    if (areaCanBomb >= world->manhattanDistance(opp_hero->getCurrentCell(),map.getCell(i,j)))
+                    {
+                        tempNumHero++;
+                        tar_ids.push_back(opp_hero->getId()) ;
+                    }
+                  }
+                if(tempNumHero >= maxManInArea){
+                    targetCellForBomb.second = map.getCell(i,j);
+                    maxManInArea = tempNumHero ;
+                    targets = tar_ids ;
+                }
             }
         }
     }
-    sss = true ;
-    CalcDamageCell(world , abil , targetCellForBomb , maxManInArea , opposition) ;
-    sss = false;
     return targetCellForBomb ;
 }
 
-pair<int, Cell > findBestPosForEnemies(Hero* my_hero, World* world,AbilityConstants* abil,int& maxManInArea){
+pair<int,Cell> findBestPosForEnemies(Hero* my_hero, World* world,AbilityConstants* abil,int& maxManInArea){
+
   maxManInArea = 0 ;
   Map map = world->getMap();
   int n = map.getRowNum();
@@ -137,20 +103,25 @@ pair<int, Cell > findBestPosForEnemies(Hero* my_hero, World* world,AbilityConsta
                   maxManInArea = tempNumHero ;
                   targets = tar_ids ;
               }
-            }
           }
       }
+  }
+
+  // cout << my_hero->getId() << "=>" << maxManInArea << " ! " ;
+  // for(auto id:targets)
+  //   cout << id <<" " ;
+  // cout << endl ;
 
   return targetCellForBomb ;
 }
 
-pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index){
+pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index)
+{
     int maxManInArea = 0;
     Ability abil = my_hero->getAbility(AbilityName::BLASTER_BOMB);
     Map map = world->getMap();
     if(abil.isReady()){
-        pair<int,Cell> targetCellForBomb;
-        targetCellForBomb.second = findBestPosforAttack(my_hero->getCurrentCell(),world->getOppHeroes(), world, findAbility((AbilityName::BLASTER_BOMB),world),maxManInArea);
+        pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero,world->getOppHeroes(), world, abil,maxManInArea);
         targetCellForBomb.first = 0 ;
         if(maxManInArea > 0){
             // cout<<"$$$ BOMB => " << index << " : " ;
@@ -164,8 +135,7 @@ pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index){
     }
     maxManInArea = 0;
     abil = my_hero->getAbility(AbilityName::BLASTER_ATTACK);
-    pair<int,Cell> targetCellForBomb ;
-    targetCellForBomb.second = findBestPosforAttack(my_hero->getCurrentCell(),world->getOppHeroes(), world, findAbility((AbilityName::BLASTER_ATTACK),world), maxManInArea);
+    pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero,world->getOppHeroes(), world, abil, maxManInArea);
     targetCellForBomb.first = 1 ;
     if(maxManInArea > 0 ){
       // cout<<"$$$ ATTACK => " << index << " : " ;
@@ -183,18 +153,20 @@ pair<int,Cell> calcBLASTER(Hero* my_hero, int& ap, World* world,int index){
     return targetCellForBomb;
 }
 
-void reset_damage_taken_enemies(World* world)
+AbilityConstants* findAbility(AbilityName an , World* world)
 {
-  for (Hero *opp_hero : world->getOppHeroes())
+  auto vec = world->getAbilityConstants() ;
+  for(auto u:vec)
   {
-    damage_taken[opp_hero->getId()] = 0 ;
+    if(u->getName() == an)
+      return u;
   }
 }
 
 void calcDamageTaken(World* world)
 {
-  for(auto hero:world->getMyHeroes())
-    damage_taken[hero->getId()] = 0 ;
+  for(int i=0;i<10;i++)
+    damage_taken[i] = 0 ;
   double p ;
   for (Hero *opp_hero : world->getOppHeroes()) {
       if (opp_hero->getCurrentCell().isInVision())//if hero is seen
@@ -276,7 +248,7 @@ pair<int,Cell> calcHEALER(Hero* my_hero ,int& ap , World* world , int id)
       }
     }
 
-    target.second = findBestPosforAttack(my_hero->getCurrentCell() , world->getOppHeroes() , world , findAbility((AbilityName::HEALER_ATTACK),world) , maxManInArea) ;
+    target = findBestPosWithRange(my_hero , world->getOppHeroes() , world , att , maxManInArea) ;
 
     if(maxManInArea==0)
       return {-1 , Cell::NULL_CELL} ;
@@ -292,8 +264,7 @@ pair<int,Cell> calcGUARDIAN(Hero* my_hero ,int& ap , World* world,int index){
     Ability abil = my_hero->getAbility(AbilityName::GUARDIAN_ATTACK);
     Map map = world->getMap();
 
-        pair<int,Cell> targetCellForBomb;
-        targetCellForBomb.second = findBestPosforAttack(my_hero->getCurrentCell(),world->getOppHeroes(), world, findAbility((AbilityName::GUARDIAN_ATTACK),world),maxManInArea);
+        pair<int,Cell> targetCellForBomb = findBestPosWithRange(my_hero,world->getOppHeroes(), world, abil,maxManInArea);
         targetCellForBomb.first = 1;
         if(maxManInArea > 0){
             damage_deal[index] = maxManInArea * abil.getPower();
@@ -480,15 +451,19 @@ void calc_f(World* world, Hero* hero){
             continue;
         Cell cell = hero_friend->getCurrentCell();
         int r = cell.getRow(), c = cell.getColumn();
-        vector<pair<pii, int>> near = give_dis({{r, c}}, 2, map);
+        if (r == -1)
+            continue;
+
+        vector<ppi> near = give_dis({{r, c}}, 2, map);
         for (ppi a : near) {
+            int r = a.first.first, c = a.first.second;
             int d = a.second;
             switch (d) {
                 case 0:
-                    f[r][c] -= 1000000000;
+                    f[r][c] -= 100000000;
                     break;
                 default:
-                    f[r][c] -= (3 - d) * 100000000;
+                    f[r][c] -= (3 - d) * 10000000;
                     break;
             }
         }
@@ -508,23 +483,23 @@ void calc_f(World* world, Hero* hero){
             int friend_r = cell.getRow(), friend_c = cell.getColumn();
             if (friend_r == -1)
                 continue;
-            if (world->manhattanDistance(r, c, friend_r, friend_r) <= range) {
+            if (world->manhattanDistance(r, c, friend_r, friend_c) <= range) {
                 occupation ++;
             }
         }
 
         vector<ppi> near = give_dis({{r, c}}, range, map, false);
 
-        if (occupation < 1) {
+        if (occupation <= 1) {
             for (ppi a : near) {
                 int r = a.first.first, c = a.first.second;
                 int d = a.second;
                 switch (occupation) {
                     case 0:
-                        f[r][c] -= 10000 * d;
+                        f[r][c] -= 1000000 * d;
                         break;
                     case 1:
-                        f[r][c] -= 1000 * d;
+                        f[r][c] -= 100000 * d;
                         break;
                 }
             }
@@ -571,8 +546,6 @@ void calc_f(World* world, Hero* hero){
     for (ppi a : near) {
         int r = a.first.first, c = a.first.second;
         int d = a.second;
-        if (d == 0)
-            f[r][c] += 1000;
         f[r][c] += 100 - d;
     }
 
@@ -614,50 +587,6 @@ void calc_f(World* world, Hero* hero){
 
 }
 
-Cell find_dodge_pos(World* world, Hero* hero) {
-    calc_f(world, hero);
-
-    Map map = world->getMap();
-    int n = map.getRowNum();
-    int m = map.getColumnNum();
-
-    int cur_x = hero->getCurrentCell().getRow();
-    int cur_y = hero->getCurrentCell().getColumn();
-
-    int r;
-    bool istank = false;
-    if (hero->getName() == HeroName::GUARDIAN)
-        r = 2 , istank = true;
-    else
-        r = 4;
-
-    int mx = -1000000000;
-    pair<int , int> ret = {0, 0};
-    for (int dx = -r; dx <= r; dx++) {
-        for (int dy = -r; dy <= r; dy++) {
-            int x = cur_x + dx;
-            int y = cur_y + dy;
-            int dis = abs(dx) + abs(dy);
-
-            if((dis < 3 || dis > 5) && !istank)
-                continue;
-            if(istank && dis <= 1) continue;
-            if(!inside_map(n, m, x, y))
-                continue;
-
-            if(f[x][y] > mx){
-                mx = f[x][y];
-                ret = {x, y};
-            }
-        }
-    }
-
-    return map.getCell(ret.first, ret.second);
-}
-
-
-
-
 void AI::preProcess(World *world) {
     Map map = world->getMap();
     int n = map.getRowNum();
@@ -685,10 +614,10 @@ void AI::preProcess(World *world) {
 
         if (d == 0) {
             // inside objective
-            fp[r][c] += 100000000;
+            fp[r][c] += 1000000;
         }else {
             // near objective
-            fp[r][c] += (70 - d) * 100;
+            fp[r][c] += (70 - d) * 10000;
         }
     }
 
@@ -708,16 +637,10 @@ void AI::pick(World *world) {
             world->pickHero(HeroName::BLASTER);
             break;
         case 2:
-            if(PICK_HEALER)
-              world->pickHero(HeroName::HEALER);
-            else
-              world->pickHero(HeroName::BLASTER);
+            world->pickHero(HeroName::HEALER);
             break;
         case 3:
-            if(PICK_TANK)
-              world->pickHero(HeroName::GUARDIAN);
-            else
-              world->pickHero(HeroName::BLASTER);
+            world->pickHero(HeroName::GUARDIAN);
             break;
         default:
             world->pickHero(HeroName::BLASTER);
@@ -727,10 +650,13 @@ void AI::pick(World *world) {
 }
 
 
+
+
 void AI::move(World *world) {
     Map map = world->getMap();
     int n = map.getRowNum();
     int m = map.getColumnNum();
+    int phase = world->getMovePhaseNum();
 
     int needing = calcAP(world);
 
@@ -738,8 +664,6 @@ void AI::move(World *world) {
     /////////////////////////////////////////////////////////////////////
     if (world->getMovePhaseNum() == 0)
     {
-      reset_damage_taken_enemies(world) ;
-
       cout <<" ### "<< endl ;
       auto ca = world->getOppCastAbilities();
       for(auto u : ca)
@@ -781,34 +705,26 @@ void AI::move(World *world) {
         if (hero->getName() == HeroName::BLASTER)
             order.push_back(hero);
 
-
     // calc destination
-    if (world->getMovePhaseNum() % 1 == 0) {
+    for (Hero *hero : order) {
+        Cell cell = hero->getCurrentCell();
+        int r = cell.getRow(), c = cell.getColumn();
+        int id = hero->getId();
 
-        for (Hero *hero : order) {
-            Cell cell = hero->getCurrentCell();
-            pii cur_cell = {cell.getRow(), cell.getColumn()};
-            int id = hero->getId();
+        if (r == -1) // || (cell.isInObjectiveZone() && phase < 3))
+            continue;
 
-            if (cur_cell.first == -1)
-                continue;
+        calc_f(world, hero);
 
-            calc_f(world, hero);
-
-            vector<pair<int, pii> > f_vec;
-            for (int row = 0; row < n; row++) {
-                for (int column = 0; column < m; column++) {
-                    f_vec.push_back({f[row][column], {row, column}});
-                }
-            }
-
-            sort(f_vec.begin(), f_vec.end());
-            destination[id] = f_vec[f_vec.size() - 1].second;
-            cerr << cur_cell.first << ',' << cur_cell.second << " ---> " << destination[id].first << ','
-                    << destination[id].second << endl;
-
-
+        vector<ppi> near = give_dis({{r, c}}, cell.isInObjectiveZone() ? 6 - phase : 100, map);
+        vector<pair<int, pii>> f_vec;
+        for (ppi a : near) {
+            int r = a.first.first, c = a.first.second;
+            f_vec.push_back({f[r][c], a.first});
         }
+        sort(f_vec.begin(), f_vec.end());
+        destination[id] = f_vec[f_vec.size() - 1].second;
+        cerr << r << ',' << c << " ---> " << destination[id].first << ',' << destination[id].second << endl;
     }
 
 
@@ -843,7 +759,6 @@ void AI::move(World *world) {
 
     // move
     for (Hero* hero : order) {
-
         Cell cell = hero->getCurrentCell();
         pii cur_cell = {cell.getRow(), cell.getColumn()};
         int id = hero->getId();
@@ -857,10 +772,11 @@ void AI::move(World *world) {
 
         int dif_with_dest = f[destination[id].first][destination[id].second] - f[cur_cell.first][cur_cell.second];
 
-        // not a better destination
-        if (dif_with_dest < 20000)
-            continue;
+        cerr << dif_with_dest << endl;
 
+        // not a better destination
+        if (dif_with_dest < 2000)
+            continue;
 
         auto friend_positions = give_friend_positions(world, hero, true);
         directions[id] = world->getPathMoveDirections(cur_cell.first, cur_cell.second, destination[id].first,
@@ -908,8 +824,8 @@ void AI::move(World *world) {
             // }
 
             // not a good place too move
-            if (f[cur_cell.first][cur_cell.second] - f[next_cell.first][next_cell.second] > 9000000)
-                continue;
+            //if (f[cur_cell.first][cur_cell.second] - f[next_cell.first][next_cell.second] > 9000000)
+            //    continue;
 
             if(world->getAP() - needing - hero->getMoveAPCost() >= 0) {
                 world->moveHero(hero->getId(), dir);
@@ -920,6 +836,49 @@ void AI::move(World *world) {
 
     }
 }
+
+Cell find_dodge_pos(World* world, Hero* hero) {
+    calc_f(world, hero);
+
+    Map map = world->getMap();
+    int n = map.getRowNum();
+    int m = map.getColumnNum();
+
+    int cur_x = hero->getCurrentCell().getRow();
+    int cur_y = hero->getCurrentCell().getColumn();
+
+    int r;
+    bool istank = false;
+    if (hero->getName() == HeroName::GUARDIAN)
+        r = 2 , istank = true;
+    else
+        r = 4;
+
+    int mx = -1000000000;
+    pair<int , int> ret = {0, 0};
+    for (int dx = -r; dx <= r; dx++) {
+        for (int dy = -r; dy <= r; dy++) {
+            int x = cur_x + dx;
+            int y = cur_y + dy;
+            int dis = abs(dx) + abs(dy);
+
+            if((dis < 3 || dis > 5) && !istank)
+                continue;
+            if(istank && dis <= 1) continue;
+            if(!inside_map(n, m, x, y))
+                continue;
+
+            if(f[x][y] > mx){
+                mx = f[x][y];
+                ret = {x, y};
+            }
+        }
+    }
+
+    return map.getCell(ret.first, ret.second);
+}
+
+
 
 // TODO Improve Dodge
 // For example : dodge when there is too much damage or he is dying
